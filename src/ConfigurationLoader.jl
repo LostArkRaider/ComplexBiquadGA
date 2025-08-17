@@ -6,22 +6,6 @@ module ConfigurationLoader
 using TOML
 using Dates
 
-# Import required modules
-if !isdefined(Main, :GATypes)
-    include("GATypes.jl")
-end
-using Main.GATypes
-
-if !isdefined(Main, :InstrumentManager)
-    include("InstrumentManager.jl")
-end
-using Main.InstrumentManager
-
-if !isdefined(Main, :StorageSystem)
-    include("StorageSystem.jl")
-end
-using Main.StorageSystem
-
 export initialize_ga_system, create_default_configs,
        load_or_create_instrument, validate_system_setup,
        migrate_from_legacy_config
@@ -33,15 +17,15 @@ export initialize_ga_system, create_default_configs,
 """
 Initialize complete GA system from master configuration
 """
-function initialize_ga_system(master_config_path::String = "data/master_config.toml")::InstrumentGASystem
+function initialize_ga_system(master_config_path::String = "data/master_config.toml")
     println("\n🚀 Initializing GA Optimization System")
     println("=" ^ 60)
     
     # Create system
-    system = InstrumentGASystem(master_config_path)
+    system = Main.GATypes.InstrumentGASystem(master_config_path)
     
     # Load master configuration
-    load_master_config!(system)
+    Main.InstrumentManager.load_master_config!(system)
     
     # Validate system setup
     if !validate_system_setup(system)
@@ -50,12 +34,12 @@ function initialize_ga_system(master_config_path::String = "data/master_config.t
     end
     
     # Check memory requirements
-    if !InstrumentManager.check_memory_requirements(system)
+    if !Main.InstrumentManager.check_memory_requirements(system)
         @warn "Memory requirements may exceed limits"
     end
     
     # List available instruments
-    list_instruments(system)
+    Main.InstrumentManager.list_instruments(system)
     
     println("\n✅ GA system initialized successfully")
     return system
@@ -64,7 +48,7 @@ end
 """
 Validate system setup and directory structure
 """
-function validate_system_setup(system::InstrumentGASystem)::Bool
+function validate_system_setup(system)::Bool
     println("\n🔍 Validating system setup...")
     
     all_valid = true
@@ -95,7 +79,7 @@ function validate_system_setup(system::InstrumentGASystem)::Bool
         end
         
         # Validate configuration
-        if !validate_instrument_config(config)
+        if !Main.GATypes.validate_instrument_config(config)
             @error "    Invalid configuration for $symbol"
             all_valid = false
         end
@@ -128,13 +112,13 @@ function create_default_configs()
     ]
     
     # Create master system
-    system = InstrumentGASystem()
+    system = Main.GATypes.InstrumentGASystem()
     
     for (symbol, num_filters, periods) in instruments
         println("  Creating config for $symbol...")
         
         # Create instrument configuration
-        config = InstrumentConfig(
+        config = Main.GATypes.InstrumentConfig(
             symbol = symbol,
             num_filters = Int32(num_filters),
             population_size = Int32(100),
@@ -147,20 +131,20 @@ function create_default_configs()
         )
         
         # Add to system
-        add_instrument!(system, config)
+        Main.InstrumentManager.add_instrument!(system, config)
         
         # Create directories
-        create_instrument_directories(config)
+        Main.InstrumentManager.create_instrument_directories(config)
         
         # Save instrument config
-        save_instrument_config(config)
+        Main.InstrumentManager.save_instrument_config(config)
         
         # Create default parameters file
         create_default_parameters(config)
     end
     
     # Save master configuration
-    save_master_config(system)
+    Main.InstrumentManager.save_master_config(system)
     
     println("✅ Created default configurations for $(length(instruments)) instruments")
 end
@@ -168,19 +152,19 @@ end
 """
 Create default parameters file for an instrument
 """
-function create_default_parameters(config::InstrumentConfig)
+function create_default_parameters(config)
     # Initialize storage
-    storage = initialize_storage(config)
+    storage = Main.StorageSystem.initialize_storage(config)
     
     # Create defaults file if it doesn't exist
     defaults_path = "data/$(config.symbol)/defaults.toml"
     if !isfile(defaults_path)
-        defaults = FilterDefaults()
-        save_filter_defaults(defaults, defaults_path)
+        defaults = Main.GATypes.FilterDefaults()
+        Main.StorageSystem.save_filter_defaults(defaults, defaults_path)
     end
     
     # Apply defaults
-    apply_defaults!(storage, config.fibonacci_periods)
+    Main.StorageSystem.apply_defaults!(storage, config.fibonacci_periods)
     
     println("  ✅ Created default parameters for $(config.symbol)")
 end
@@ -192,7 +176,7 @@ end
 """
 Load or create an instrument configuration
 """
-function load_or_create_instrument(symbol::String, system::InstrumentGASystem)::InstrumentConfig
+function load_or_create_instrument(symbol::String, system)
     # Check if already loaded
     if haskey(system.instruments, symbol)
         return system.instruments[symbol]
@@ -201,9 +185,9 @@ function load_or_create_instrument(symbol::String, system::InstrumentGASystem)::
     # Try to load from config file
     config_path = "data/$symbol/config.toml"
     if isfile(config_path)
-        config = load_instrument_config(config_path)
+        config = Main.InstrumentManager.load_instrument_config(config_path)
         if config !== nothing
-            add_instrument!(system, config)
+            Main.InstrumentManager.add_instrument!(system, config)
             return config
         end
     end
@@ -227,7 +211,7 @@ function load_or_create_instrument(symbol::String, system::InstrumentGASystem)::
         periods = [1, 2, 3, 5, 8, 13, 21, 34, 55]
     end
     
-    config = InstrumentConfig(
+    config = Main.GATypes.InstrumentConfig(
         symbol = symbol,
         num_filters = Int32(num_filters),
         population_size = Int32(100),
@@ -240,9 +224,9 @@ function load_or_create_instrument(symbol::String, system::InstrumentGASystem)::
     )
     
     # Add to system and create structure
-    add_instrument!(system, config)
-    create_instrument_directories(config)
-    save_instrument_config(config)
+    Main.InstrumentManager.add_instrument!(system, config)
+    Main.InstrumentManager.create_instrument_directories(config)
+    Main.InstrumentManager.save_instrument_config(config)
     create_default_parameters(config)
     
     return config
@@ -256,7 +240,7 @@ end
 Migrate from legacy TOML configuration to new GA system
 """
 function migrate_from_legacy_config(legacy_toml_path::String, symbol::String, 
-                                   system::InstrumentGASystem)
+                                   system)
     println("\n🔄 Migrating from legacy configuration...")
     
     if !isfile(legacy_toml_path)
@@ -282,7 +266,7 @@ function migrate_from_legacy_config(legacy_toml_path::String, symbol::String,
         println("  Found $(length(periods)) filters in legacy config")
         
         # Create new instrument configuration
-        config = InstrumentConfig(
+        config = Main.GATypes.InstrumentConfig(
             symbol = symbol,
             num_filters = Int32(length(periods)),
             population_size = Int32(100),
@@ -295,11 +279,11 @@ function migrate_from_legacy_config(legacy_toml_path::String, symbol::String,
         )
         
         # Add to system
-        add_instrument!(system, config)
-        create_instrument_directories(config)
+        Main.InstrumentManager.add_instrument!(system, config)
+        Main.InstrumentManager.create_instrument_directories(config)
         
         # Initialize storage
-        storage = initialize_storage(config)
+        storage = Main.StorageSystem.initialize_storage(config)
         
         # Migrate parameters
         println("  Migrating parameters...")
@@ -325,14 +309,14 @@ function migrate_from_legacy_config(legacy_toml_path::String, symbol::String,
                     0.0f0   # Default complex weight imag
                 ]
                 
-                set_active_parameters!(storage, Int32(i), chromosome)
+                Main.StorageSystem.set_active_parameters!(storage, Int32(i), chromosome)
                 println("    ✓ Migrated filter $period")
             end
         end
         
         # Save migrated configuration
-        sync_to_storage!(storage)
-        save_instrument_config(config)
+        Main.StorageSystem.sync_to_storage!(storage)
+        Main.InstrumentManager.save_instrument_config(config)
         
         println("✅ Successfully migrated $symbol from legacy configuration")
         return true
@@ -350,7 +334,7 @@ end
 """
 Print comprehensive system status
 """
-function print_system_status(system::InstrumentGASystem)
+function print_system_status(system)
     println("\n" * "="^70)
     println("📊 GA OPTIMIZATION SYSTEM STATUS")
     println("="^70)
@@ -398,7 +382,7 @@ function print_system_status(system::InstrumentGASystem)
     println("\n💾 Memory Usage:")
     total_memory = 0.0f0
     for (symbol, config) in system.instruments
-        memory_mb = estimate_memory_usage(config)
+        memory_mb = Main.InstrumentManager.estimate_memory_usage(config)
         total_memory += memory_mb
         println("  $symbol: $(round(memory_mb, digits=1)) MB")
     end
@@ -411,7 +395,7 @@ end
 """
 Generate system report for logging
 """
-function generate_system_report(system::InstrumentGASystem)::Dict{String, Any}
+function generate_system_report(system)::Dict{String, Any}
     report = Dict{String, Any}()
     
     # System info
@@ -457,7 +441,7 @@ function generate_system_report(system::InstrumentGASystem)::Dict{String, Any}
     # Memory estimation
     total_memory = 0.0f0
     for (_, config) in system.instruments
-        total_memory += estimate_memory_usage(config)
+        total_memory += Main.InstrumentManager.estimate_memory_usage(config)
     end
     report["total_memory_mb"] = round(total_memory, digits=1)
     report["memory_usage_percent"] = round(100 * total_memory / (system.max_memory_gb * 1024), digits=1)

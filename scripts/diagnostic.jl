@@ -17,11 +17,9 @@ end
 println("\n📁 Working Directory: ", pwd())
 
 # Check for Project.toml in current directory
-if isfile("Project.toml")
-    println("  ✅ Project.toml found - in project root")
-else
+if !isfile("Project.toml")
     println("  ⚠️ Project.toml not found - make sure you're in the project root directory!")
-    exit(1)
+    return  # Don't exit, just return
 end
 
 # Check for source files (paths relative to project root)
@@ -31,7 +29,7 @@ required_files = [
     "src/InstrumentManager.jl",
     "src/StorageSystem.jl",
     "src/ConfigurationLoader.jl",
-    "load_all.jl"
+    "../load_all.jl"
 ]
 
 missing_files = String[]
@@ -47,7 +45,7 @@ end
 if !isempty(missing_files)
     println("\n⚠️ Missing files detected!")
     println("Please ensure all files are present.")
-    exit(1)
+    return  # Don't exit, just return
 end
 
 # Check for required packages
@@ -73,25 +71,38 @@ if !isempty(missing_packages)
         println("  Installing $pkg...")
         Pkg.add(pkg)
     end
-    println("\n✅ Packages installed! Please restart Julia and run this script again.")
-    exit(0)
+    println("\n✅ Packages installed! Please run the diagnostic again.")
+    return  # Don't exit, just return
 end
 
 # Load all modules using the master loader
 println("\n🔧 Loading all modules...")
+module_load_success = false  # Initialize the variable
 try
-    QUIET_LOAD = false  # Show confirmation message
-    include("load_all.jl")
+    # When running from include("scripts/diagnostic.jl"), we need to go up one level
+    # Check if we can find load_all.jl in current dir or parent dir
+    load_path = ""
+    if isfile("load_all.jl")
+        load_path = "load_all.jl"
+    elseif isfile("../load_all.jl")
+        load_path = "../load_all.jl"
+    else
+        error("Cannot find load_all.jl")
+    end
+    
+    include(load_path)
+    module_load_success = true  # Set to true if successful
     println("  ✅ All modules loaded successfully")
 catch e
     println("  ❌ Failed to load modules")
     println("  Error: ", e)
-    exit(1)
-end
-
-if !module_load_success
-    println("\n❌ Module loading failed. Please check the errors above.")
-    exit(1)
+    println("\n  Debug info:")
+    println("    Current working directory: ", pwd())
+    println("    Script location: ", @__DIR__)
+    println("    load_all.jl in pwd: ", isfile("load_all.jl"))
+    println("    load_all.jl in parent: ", isfile("../load_all.jl"))
+    # Don't exit! Just return so REPL stays alive
+    return
 end
 
 # Quick functionality test
@@ -151,11 +162,7 @@ println("\n" * "="^60)
 println("DIAGNOSTIC COMPLETE")
 println("="^60)
 
-if module_load_success
-    println("\n✅ System is ready for testing!")
-    println("\nNext steps:")
-    println("  1. Run the full test suite: julia run_tests.jl")
-    println("  2. Or run a simple test: julia -e 'include(\"src/GATypes.jl\"); using Main.GATypes; println(\"OK\")'")
-else
-    println("\n❌ System has issues that need to be resolved.")
-end
+println("\n✅ System is ready for testing!")
+println("\nNext steps:")
+println("  1. Run the full test suite: julia test/test_chunk2.jl")
+println("  2. Start using the GA system with: include(\"load_all.jl\")")

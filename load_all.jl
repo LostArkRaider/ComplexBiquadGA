@@ -41,9 +41,9 @@ using Main.ConfigurationLoader
 
 # Export commonly used types and functions for convenience
 # This makes them available without module prefix
-const IGASystem = InstrumentGASystem
-const IConfig = InstrumentConfig
-const WTStorage = WriteThruStorage
+const IGASystem = Main.GATypes.InstrumentGASystem
+const IConfig = Main.GATypes.InstrumentConfig
+const WTStorage = Main.GATypes.WriteThruStorage
 
 # Confirmation message (can be disabled by setting QUIET_LOAD=true before including)
 if !@isdefined(QUIET_LOAD) || !QUIET_LOAD

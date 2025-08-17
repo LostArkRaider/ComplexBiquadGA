@@ -8,16 +8,11 @@ using Dates
 using Printf
 using JLD2
 
-# Import GATypes
-if !isdefined(Main, :GATypes)
-    include("GATypes.jl")
-end
-using Main.GATypes
-
 export load_master_config!, add_instrument!, remove_instrument!,
        switch_instrument!, get_current_instrument, list_instruments,
        initialize_from_instrument!, create_instrument_directories,
-       save_master_config, load_instrument_config, save_instrument_config
+       save_master_config, load_instrument_config, save_instrument_config,
+       check_memory_requirements, estimate_memory_usage
 
 # =============================================================================
 # MASTER CONFIGURATION MANAGEMENT
@@ -26,7 +21,7 @@ export load_master_config!, add_instrument!, remove_instrument!,
 """
 Load master configuration file and populate InstrumentGASystem
 """
-function load_master_config!(system::InstrumentGASystem)
+function load_master_config!(system)
     if !isfile(system.master_config_path)
         @warn "Master config not found at $(system.master_config_path), creating default"
         create_default_master_config(system.master_config_path)
@@ -52,7 +47,7 @@ function load_master_config!(system::InstrumentGASystem)
         for symbol in active
             if haskey(config, symbol)
                 instrument_config = parse_instrument_config(symbol, config[symbol])
-                if validate_instrument_config(instrument_config)
+                if Main.GATypes.validate_instrument_config(instrument_config)
                     system.instruments[symbol] = instrument_config
                     println("✅ Loaded instrument: $symbol with $(instrument_config.num_filters) filters")
                 else
@@ -71,7 +66,7 @@ end
 """
 Parse individual instrument configuration from TOML
 """
-function parse_instrument_config(symbol::String, config::Dict)::InstrumentConfig
+function parse_instrument_config(symbol::String, config::Dict)
     # Extract configuration values with defaults
     num_filters = Int32(get(config, "num_filters", 50))
     population_size = Int32(get(config, "population_size", 100))
@@ -87,10 +82,10 @@ function parse_instrument_config(symbol::String, config::Dict)::InstrumentConfig
     config_path = "$base_path/config.toml"
     
     # Parse GA parameters
-    ga_params = GAParameters()
+    ga_params = Main.GATypes.GAParameters()
     if haskey(config, "ga_params")
         ga_cfg = config["ga_params"]
-        ga_params = GAParameters(
+        ga_params = Main.GATypes.GAParameters(
             mutation_rate = Float32(get(ga_cfg, "mutation_rate", 0.1)),
             crossover_rate = Float32(get(ga_cfg, "crossover_rate", 0.7)),
             elite_size = Int32(get(ga_cfg, "elite_size", 10)),
@@ -106,7 +101,7 @@ function parse_instrument_config(symbol::String, config::Dict)::InstrumentConfig
     convergence_threshold = Float32(get(config, "convergence_threshold", 0.001))
     initialization_source = get(config, "initialization_source", nothing)
     
-    return InstrumentConfig(
+    return Main.GATypes.InstrumentConfig(
         symbol = symbol,
         num_filters = num_filters,
         population_size = population_size,
@@ -124,7 +119,7 @@ end
 """
 Save master configuration to TOML file
 """
-function save_master_config(system::InstrumentGASystem)
+function save_master_config(system)
     config = Dict{String, Any}()
     
     # Global settings
@@ -225,11 +220,11 @@ end
 """
 Add a new instrument to the system
 """
-function add_instrument!(system::InstrumentGASystem, config::InstrumentConfig)
+function add_instrument!(system, config)
     symbol = config.symbol
     
     # Validate configuration
-    if !validate_instrument_config(config)
+    if !Main.GATypes.validate_instrument_config(config)
         @error "Invalid configuration for instrument $symbol"
         return false
     end
@@ -253,7 +248,7 @@ end
 """
 Remove an instrument from the system
 """
-function remove_instrument!(system::InstrumentGASystem, symbol::String)
+function remove_instrument!(system, symbol::String)
     if !haskey(system.instruments, symbol)
         @warn "Instrument $symbol not found"
         return false
@@ -280,7 +275,7 @@ end
 """
 Switch to a different instrument for optimization
 """
-function switch_instrument!(system::InstrumentGASystem, symbol::String)
+function switch_instrument!(system, symbol::String)
     if !haskey(system.instruments, symbol)
         @error "Instrument $symbol not found in system"
         return false
@@ -302,7 +297,7 @@ end
 """
 Get the currently active instrument configuration
 """
-function get_current_instrument(system::InstrumentGASystem)::Union{InstrumentConfig, Nothing}
+function get_current_instrument(system)
     if system.current_instrument === nothing
         return nothing
     end
@@ -313,7 +308,7 @@ end
 """
 List all available instruments
 """
-function list_instruments(system::InstrumentGASystem)
+function list_instruments(system)
     println("\n📊 Available Instruments:")
     println("=" ^ 60)
     
@@ -340,7 +335,7 @@ end
 """
 Initialize new instrument from successful one
 """
-function initialize_from_instrument!(system::InstrumentGASystem, 
+function initialize_from_instrument!(system, 
                                     target_symbol::String, 
                                     source_symbol::String)
     # Validate both instruments exist
@@ -403,7 +398,7 @@ end
 """
 Create directory structure for an instrument
 """
-function create_instrument_directories(config::InstrumentConfig)
+function create_instrument_directories(config)
     base_path = "data/$(config.symbol)"
     
     directories = [
@@ -437,7 +432,7 @@ end
 """
 Load instrument-specific configuration from TOML
 """
-function load_instrument_config(path::String)::Union{InstrumentConfig, Nothing}
+function load_instrument_config(path::String)
     if !isfile(path)
         @error "Configuration file not found: $path"
         return nothing
@@ -456,7 +451,7 @@ end
 """
 Save instrument configuration to TOML
 """
-function save_instrument_config(config::InstrumentConfig)
+function save_instrument_config(config)
     toml_dict = Dict{String, Any}()
     
     # Instrument section
@@ -511,7 +506,7 @@ end
 """
 Estimate memory usage for an instrument
 """
-function estimate_memory_usage(config::InstrumentConfig)::Float32
+function estimate_memory_usage(config)::Float32
     # Per filter memory (in bytes)
     population_memory = config.population_size * 13 * 4  # Float32
     fitness_memory = config.population_size * 4           # Float32
@@ -527,7 +522,7 @@ end
 """
 Check if system has sufficient memory for all instruments
 """
-function check_memory_requirements(system::InstrumentGASystem)::Bool
+function check_memory_requirements(system)::Bool
     total_memory_mb = 0.0f0
     
     println("\n💾 Memory Usage Estimation:")

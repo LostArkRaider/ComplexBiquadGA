@@ -7,69 +7,11 @@ using Dates
 using Parameters
 
 export InstrumentConfig, InstrumentGASystem, WriteThruStorage, FilterDefaults,
-       SingleFilterGA, FilterBankGA, GAParameters, ParameterRanges
+       SingleFilterGA, FilterBankGA, GAParameters, ParameterRanges,
+       validate_instrument_config, get_default_chromosome
 
 # =============================================================================
-# STUB INTERFACES FROM CHUNK 1 (To be implemented in Chunk 1)
-# =============================================================================
-
-# Stub for individual filter GA (Chunk 1 will implement fully)
-mutable struct SingleFilterGA
-    # Filter identity
-    period::Int32                            # Fibonacci period
-    filter_index::Int32                      # Position in bank
-    
-    # GA population (13 parameters per individual)
-    population::Matrix{Float32}              # population_size × 13
-    fitness::Vector{Float32}                 # population_size
-    
-    # Best solution tracking
-    best_chromosome::Vector{Float32}         # 13 parameters
-    best_fitness::Float32
-    generations_since_improvement::Int32
-    
-    # Evolution state
-    generation::Int32
-    converged::Bool
-    
-    # Parameter bounds
-    param_ranges::ParameterRanges
-    
-    # Constructor stub
-    function SingleFilterGA(period::Int32, filter_index::Int32, pop_size::Int32)
-        population = randn(Float32, pop_size, 13)
-        fitness = zeros(Float32, pop_size)
-        best_chromosome = zeros(Float32, 13)
-        param_ranges = ParameterRanges()  # Will be defined below
-        
-        new(period, filter_index, population, fitness, 
-            best_chromosome, 0.0f0, 0, 0, false, param_ranges)
-    end
-end
-
-# Stub for filter bank GA (Chunk 1 will implement fully)
-mutable struct FilterBankGA
-    instrument::String                        # "YM", "ES", etc.
-    num_filters::Int32                       # Total filters
-    population_size::Int32                   # Same for all filters
-    
-    # Independent GA for each filter
-    filter_gas::Vector{SingleFilterGA}       # Length = num_filters
-    
-    # Shared configuration
-    ga_params::GAParameters                  # Mutation rate, etc.
-    
-    # Write-through storage
-    storage::WriteThruStorage
-    
-    # Performance tracking
-    generation::Int32
-    total_evaluations::Int64
-    best_fitness_history::Vector{Float32}
-end
-
-# =============================================================================
-# CORE GA PARAMETER STRUCTURES
+# CORE GA PARAMETER STRUCTURES (MUST BE DEFINED FIRST)
 # =============================================================================
 
 # GA algorithm parameters
@@ -107,6 +49,121 @@ end
     # Complex weight (magnitude and phase)
     complex_weight_mag_range::Tuple{Float32, Float32} = (0.0f0, 2.0f0)
     complex_weight_phase_range::Tuple{Float32, Float32} = (0.0f0, Float32(2π))
+end
+
+# =============================================================================
+# STORAGE STRUCTURES (DEFINED BEFORE GA TYPES THAT USE THEM)
+# =============================================================================
+
+# Default configuration for new filters
+@with_kw struct FilterDefaults
+    # Default parameter values (Float32 for GPU efficiency)
+    default_q_factor::Float32 = 2.0f0
+    default_batch_size::Int32 = 1000
+    default_pll_gain::Float32 = 0.1f0
+    default_loop_bandwidth::Float32 = 0.01f0
+    default_lock_threshold::Float32 = 0.7f0
+    default_ring_decay::Float32 = 0.995f0
+    default_enable_clamping::Bool = false
+    default_clamping_threshold::Float32 = 1.0f-6
+    default_volume_scaling::Float32 = 1.0f0
+    default_max_frequency_deviation::Float32 = 0.2f0
+    default_phase_error_history_length::Int32 = 20
+    
+    # Default complex weight
+    default_complex_weight_real::Float32 = 1.0f0
+    default_complex_weight_imag::Float32 = 0.0f0
+    
+    # Period-specific overrides (optional)
+    period_overrides::Dict{Int32, Vector{Float32}} = Dict{Int32, Vector{Float32}}()
+end
+
+# Automatic persistence to JLD2
+mutable struct WriteThruStorage
+    # Memory-resident parameters
+    active_params::Matrix{Float32}           # num_filters × 13
+    
+    # JLD2 backing store
+    jld2_path::String
+    last_sync::DateTime
+    sync_interval::Int32                     # Generations between syncs
+    
+    # Change tracking
+    dirty_filters::BitVector                 # Which filters changed
+    pending_updates::Int32
+    
+    # TOML defaults for new filters
+    default_config::FilterDefaults
+    
+    # Constructor
+    function WriteThruStorage(num_filters::Int32, jld2_path::String, 
+                            sync_interval::Int32 = 10)
+        active_params = zeros(Float32, num_filters, 13)
+        dirty_filters = falses(num_filters)
+        default_config = FilterDefaults()
+        
+        new(active_params, jld2_path, now(), sync_interval,
+            dirty_filters, 0, default_config)
+    end
+end
+
+# =============================================================================
+# GA OPTIMIZATION STRUCTURES (NOW CAN USE WriteThruStorage)
+# =============================================================================
+
+# Stub for individual filter GA (Chunk 1 will implement fully)
+mutable struct SingleFilterGA
+    # Filter identity
+    period::Int32                            # Fibonacci period
+    filter_index::Int32                      # Position in bank
+    
+    # GA population (13 parameters per individual)
+    population::Matrix{Float32}              # population_size × 13
+    fitness::Vector{Float32}                 # population_size
+    
+    # Best solution tracking
+    best_chromosome::Vector{Float32}         # 13 parameters
+    best_fitness::Float32
+    generations_since_improvement::Int32
+    
+    # Evolution state
+    generation::Int32
+    converged::Bool
+    
+    # Parameter bounds
+    param_ranges::ParameterRanges
+    
+    # Constructor stub
+    function SingleFilterGA(period::Int32, filter_index::Int32, pop_size::Int32)
+        population = randn(Float32, pop_size, 13)
+        fitness = zeros(Float32, pop_size)
+        best_chromosome = zeros(Float32, 13)
+        param_ranges = ParameterRanges()
+        
+        new(period, filter_index, population, fitness, 
+            best_chromosome, 0.0f0, 0, 0, false, param_ranges)
+    end
+end
+
+# Stub for filter bank GA (Chunk 1 will implement fully)
+mutable struct FilterBankGA
+    instrument::String                        # "YM", "ES", etc.
+    num_filters::Int32                       # Total filters
+    population_size::Int32                   # Same for all filters
+    
+    # Independent GA for each filter
+    filter_gas::Vector{SingleFilterGA}       # Length = num_filters
+    
+    # Shared configuration
+    ga_params::GAParameters                  # Mutation rate, etc.
+    
+    # Write-through storage
+    storage::WriteThruStorage                # Now this is defined!
+    
+    # Performance tracking
+    generation::Int32
+    total_evaluations::Int64
+    best_fitness_history::Vector{Float32}
 end
 
 # =============================================================================
@@ -166,62 +223,6 @@ mutable struct InstrumentGASystem
             12.0f0, # 12GB memory limit
             50      # Checkpoint every 50 generations
         )
-    end
-end
-
-# =============================================================================
-# STORAGE STRUCTURES
-# =============================================================================
-
-# Default configuration for new filters
-@with_kw struct FilterDefaults
-    # Default parameter values (Float32 for GPU efficiency)
-    default_q_factor::Float32 = 2.0f0
-    default_batch_size::Int32 = 1000
-    default_pll_gain::Float32 = 0.1f0
-    default_loop_bandwidth::Float32 = 0.01f0
-    default_lock_threshold::Float32 = 0.7f0
-    default_ring_decay::Float32 = 0.995f0
-    default_enable_clamping::Bool = false
-    default_clamping_threshold::Float32 = 1.0f-6
-    default_volume_scaling::Float32 = 1.0f0
-    default_max_frequency_deviation::Float32 = 0.2f0
-    default_phase_error_history_length::Int32 = 20
-    
-    # Default complex weight
-    default_complex_weight_real::Float32 = 1.0f0
-    default_complex_weight_imag::Float32 = 0.0f0
-    
-    # Period-specific overrides (optional)
-    period_overrides::Dict{Int32, Vector{Float32}} = Dict{Int32, Vector{Float32}}()
-end
-
-# Automatic persistence to JLD2
-mutable struct WriteThruStorage
-    # Memory-resident parameters
-    active_params::Matrix{Float32}           # num_filters × 13
-    
-    # JLD2 backing store
-    jld2_path::String
-    last_sync::DateTime
-    sync_interval::Int32                     # Generations between syncs
-    
-    # Change tracking
-    dirty_filters::BitVector                 # Which filters changed
-    pending_updates::Int32
-    
-    # TOML defaults for new filters
-    default_config::FilterDefaults
-    
-    # Constructor
-    function WriteThruStorage(num_filters::Int32, jld2_path::String, 
-                            sync_interval::Int32 = 10)
-        active_params = zeros(Float32, num_filters, 13)
-        dirty_filters = falses(num_filters)
-        default_config = FilterDefaults()
-        
-        new(active_params, jld2_path, now(), sync_interval,
-            dirty_filters, 0, default_config)
     end
 end
 

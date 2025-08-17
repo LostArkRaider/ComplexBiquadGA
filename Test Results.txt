@@ -1,0 +1,89 @@
+
+julia> include("test_freq_selectivity.jl")
+
+============================================================
+Testing Frequency Selectivity with Fixed Normalization
+============================================================
+
+1. GOOD FILTER (should have selectivity > 0.3):
+DEBUG: n_samples = 200
+DEBUG: nfft = 256
+DEBUG: input_fft max magnitude = 96.837456
+DEBUG: output_fft max magnitude = 91.88687
+DEBUG: freq_response max = 9.784129
+DEBUG: freq_response min = 0.039462373
+DEBUG: freq_response mean = 1.1152493
+DEBUG: target_period = 26.0
+DEBUG: target_freq = 0.03846154
+DEBUG: target_bin = 11
+DEBUG: target_response = 0.9488774
+DEBUG: bw_bins = 2
+DEBUG: passband range = 9:13
+DEBUG: passband_response = 0.95386446
+DEBUG: stopband_response = 1.1321164
+DEBUG: stopband indices count = 123
+DEBUG: selectivity ratio = 0.8425498
+DEBUG: normalized = 0.16850996
+DEBUG: Final selectivity = 0.8425498, normalized = 0.16850996
+==================================================
+Good filter normalized value: 0.16850996
+
+2. POOR FILTER (should have lower selectivity):
+DEBUG: n_samples = 200
+DEBUG: nfft = 256
+DEBUG: input_fft max magnitude = 96.837456
+DEBUG: output_fft max magnitude = 87.175934
+DEBUG: freq_response max = 1.2369473
+DEBUG: freq_response min = 0.8726782
+DEBUG: freq_response mean = 0.9039376
+DEBUG: target_period = 26.0
+DEBUG: target_freq = 0.03846154
+DEBUG: target_bin = 11
+DEBUG: target_response = 0.9002295
+DEBUG: bw_bins = 2
+DEBUG: passband range = 9:13
+DEBUG: passband_response = 0.89978707
+DEBUG: stopband_response = 0.902569
+DEBUG: stopband indices count = 123
+DEBUG: selectivity ratio = 0.9969178
+DEBUG: normalized = 0.19938356
+DEBUG: Final selectivity = 0.9969178, normalized = 0.19938356
+==================================================
+Poor filter normalized value: 0.19938356
+
+3. PERFECT FILTER (should have highest selectivity > 0.5):
+DEBUG: n_samples = 200
+DEBUG: nfft = 256
+DEBUG: input_fft max magnitude = 96.837456
+DEBUG: output_fft max magnitude = 96.69684
+DEBUG: freq_response max = 11.394997
+DEBUG: freq_response min = 0.048336875
+DEBUG: freq_response mean = 1.2154399
+DEBUG: target_period = 26.0
+DEBUG: target_freq = 0.03846154
+DEBUG: target_bin = 11
+DEBUG: target_response = 0.9985479
+DEBUG: bw_bins = 2
+DEBUG: passband range = 9:13
+DEBUG: passband_response = 1.0048532
+DEBUG: stopband_response = 1.2347552
+DEBUG: stopband indices count = 123
+DEBUG: selectivity ratio = 0.81380767
+DEBUG: normalized = 0.16276154
+DEBUG: Final selectivity = 0.81380767, normalized = 0.16276154
+==================================================
+Perfect filter normalized value: 0.16276154
+
+============================================================
+SUMMARY:
+============================================================
+Good filter:    0.16850996 (should be > 0.3)
+Poor filter:    0.19938356 (should be < good)
+Perfect filter: 0.16276154 (should be > 0.5 and > good)
+
+Test results:
+✓ Good > 0.3:     false
+✓ Poor < Good:    false
+✓ Perfect > 0.5:  false
+✓ Perfect > Good: false
+============================================================

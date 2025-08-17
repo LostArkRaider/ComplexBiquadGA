@@ -8,12 +8,6 @@ using TOML
 using Dates
 using Printf
 
-# Import GATypes
-if !isdefined(Main, :GATypes)
-    include("GATypes.jl")
-end
-using Main.GATypes
-
 export sync_to_storage!, load_from_storage!, mark_filter_dirty!,
        create_checkpoint, restore_from_checkpoint, list_checkpoints,
        load_filter_defaults, save_filter_defaults, apply_defaults!,
@@ -27,9 +21,9 @@ export sync_to_storage!, load_from_storage!, mark_filter_dirty!,
 """
 Initialize storage system for an instrument
 """
-function initialize_storage(config::InstrumentConfig)::WriteThruStorage
+function initialize_storage(config)
     # Create storage with proper dimensions
-    storage = WriteThruStorage(
+    storage = Main.GATypes.WriteThruStorage(
         config.num_filters,
         config.parameter_path,
         10  # Default sync interval
@@ -62,7 +56,7 @@ end
 """
 Sync memory-resident parameters to JLD2 backing store
 """
-function sync_to_storage!(storage::WriteThruStorage)
+function sync_to_storage!(storage)
     # Check if any filters are dirty
     if storage.pending_updates == 0
         return  # Nothing to sync
@@ -98,7 +92,7 @@ end
 """
 Load parameters from JLD2 backing store
 """
-function load_from_storage!(storage::WriteThruStorage)
+function load_from_storage!(storage)
     if !isfile(storage.jld2_path)
         @warn "Storage file not found: $(storage.jld2_path)"
         return false
@@ -142,7 +136,7 @@ end
 """
 Mark a filter as dirty (needs sync)
 """
-function mark_filter_dirty!(storage::WriteThruStorage, filter_index::Int32)
+function mark_filter_dirty!(storage, filter_index::Int32)
     if filter_index < 1 || filter_index > length(storage.dirty_filters)
         @error "Invalid filter index: $filter_index"
         return
@@ -157,7 +151,7 @@ end
 """
 Get active parameters for a specific filter
 """
-function get_active_parameters(storage::WriteThruStorage, filter_index::Int32)::Vector{Float32}
+function get_active_parameters(storage, filter_index::Int32)::Vector{Float32}
     if filter_index < 1 || filter_index > size(storage.active_params, 1)
         @error "Invalid filter index: $filter_index"
         return Float32[]
@@ -169,7 +163,7 @@ end
 """
 Set active parameters for a specific filter
 """
-function set_active_parameters!(storage::WriteThruStorage, filter_index::Int32, 
+function set_active_parameters!(storage, filter_index::Int32, 
                                params::Vector{Float32})
     if filter_index < 1 || filter_index > size(storage.active_params, 1)
         @error "Invalid filter index: $filter_index"
@@ -192,7 +186,7 @@ end
 """
 Create a checkpoint of current parameters
 """
-function create_checkpoint(storage::WriteThruStorage, generation::Int32, 
+function create_checkpoint(storage, generation::Int32, 
                           fitness::Float32 = 0.0f0)::String
     # Generate checkpoint filename
     timestamp = Dates.format(now(), "yyyymmdd_HHMMSS")
@@ -221,7 +215,7 @@ end
 """
 Restore parameters from a checkpoint
 """
-function restore_from_checkpoint(storage::WriteThruStorage, checkpoint_file::String)::Bool
+function restore_from_checkpoint(storage, checkpoint_file::String)::Bool
     if !isfile(checkpoint_file)
         @error "Checkpoint file not found: $checkpoint_file"
         return false
@@ -269,7 +263,7 @@ end
 """
 List available checkpoints
 """
-function list_checkpoints(storage::WriteThruStorage)::Vector{String}
+function list_checkpoints(storage)::Vector{String}
     checkpoint_dir = dirname(storage.jld2_path)
     
     if !isdir(checkpoint_dir)
@@ -290,7 +284,7 @@ end
 """
 Clean up old checkpoints, keeping only the most recent n
 """
-function cleanup_old_checkpoints(storage::WriteThruStorage, keep_n::Int = 5)
+function cleanup_old_checkpoints(storage, keep_n::Int = 5)
     checkpoints = list_checkpoints(storage)
     
     if length(checkpoints) <= keep_n
@@ -319,10 +313,10 @@ end
 """
 Load filter defaults from TOML file
 """
-function load_filter_defaults(path::String)::FilterDefaults
+function load_filter_defaults(path::String)
     if !isfile(path)
         @warn "Defaults file not found: $path"
-        return FilterDefaults()
+        return Main.GATypes.FilterDefaults()
     end
     
     try
@@ -331,7 +325,7 @@ function load_filter_defaults(path::String)::FilterDefaults
         # Parse default parameters
         defaults = get(config, "default_parameters", Dict())
         
-        filter_defaults = FilterDefaults(
+        filter_defaults = Main.GATypes.FilterDefaults(
             default_q_factor = Float32(get(defaults, "q_factor", 2.0)),
             default_batch_size = Int32(get(defaults, "batch_size", 1000)),
             default_pll_gain = Float32(get(defaults, "phase_detector_gain", 0.1)),
@@ -374,7 +368,7 @@ function load_filter_defaults(path::String)::FilterDefaults
                 overrides[period] = override_params
             end
             
-            filter_defaults = FilterDefaults(
+            filter_defaults = Main.GATypes.FilterDefaults(
                 filter_defaults.default_q_factor,
                 filter_defaults.default_batch_size,
                 filter_defaults.default_pll_gain,
@@ -396,14 +390,14 @@ function load_filter_defaults(path::String)::FilterDefaults
         
     catch e
         @error "Failed to load defaults from $path: $e"
-        return FilterDefaults()
+        return Main.GATypes.FilterDefaults()
     end
 end
 
 """
 Save filter defaults to TOML file
 """
-function save_filter_defaults(defaults::FilterDefaults, path::String)
+function save_filter_defaults(defaults, path::String)
     config = Dict{String, Any}()
     
     # Default parameters section
@@ -464,14 +458,14 @@ end
 """
 Apply defaults to storage for initialization
 """
-function apply_defaults!(storage::WriteThruStorage, fibonacci_periods::Vector{Int32})
+function apply_defaults!(storage, fibonacci_periods::Vector{Int32})
     for (i, period) in enumerate(fibonacci_periods)
         if i > size(storage.active_params, 1)
             break  # Don't exceed storage dimensions
         end
         
         # Get default chromosome for this period
-        default_params = get_default_chromosome(period, storage.default_config)
+        default_params = Main.GATypes.get_default_chromosome(period, storage.default_config)
         
         # Set parameters
         storage.active_params[i, :] = default_params
@@ -491,7 +485,7 @@ end
 """
 Get storage statistics
 """
-function get_storage_stats(storage::WriteThruStorage)::Dict{String, Any}
+function get_storage_stats(storage)::Dict{String, Any}
     stats = Dict{String, Any}()
     
     stats["num_filters"] = size(storage.active_params, 1)
@@ -519,7 +513,7 @@ end
 """
 Print storage status
 """
-function print_storage_status(storage::WriteThruStorage)
+function print_storage_status(storage)
     stats = get_storage_stats(storage)
     
     println("\n📊 Storage Status:")
