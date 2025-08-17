@@ -318,7 +318,8 @@ function evaluate_fitness(
     cache::Union{FitnessCache, Nothing} = nothing
 )::FitnessResult
     
-    start_time = time()
+    # Use nanosecond precision for timing
+    start_time = time_ns()
     
     # Validate chromosome
     @assert length(chromosome) == 13 "Chromosome must have 13 genes"
@@ -395,7 +396,15 @@ function evaluate_fitness(
     # Clamp to [0, 1]
     total_fitness = clamp(total_fitness, 0.0f0, 1.0f0)
     
-    evaluation_time_ms = Float32((time() - start_time) * 1000)
+    # Calculate evaluation time in milliseconds with nanosecond precision
+    end_time = time_ns()
+    elapsed_ns = end_time - start_time
+    evaluation_time_ms = Float32(elapsed_ns / 1_000_000.0)
+    
+    # Ensure minimum non-zero time (even very fast operations should register)
+    if evaluation_time_ms < 0.001f0
+        evaluation_time_ms = 0.001f0  # Minimum 1 microsecond
+    end
     
     result = FitnessResult(
         total_fitness,
