@@ -48,7 +48,10 @@ export generate_synthetic_signal, create_test_dataframe,
        validate_fibonacci_number, get_fibonacci_numbers,
        generate_test_signal_for_filter, generate_test_signal_set,
        analyze_frequency_content, validate_signal, print_signal_summary,
-       SignalParams, SyntheticSignal
+       SignalParams, SyntheticSignal, generate_complex_iq_signal, create_test_signal_complex_iq,
+       phase_pos_global, apply_quad_phase,
+       convert_to_complex_iq, analyze_complex_iq_signal,
+       generate_test_signals_complex_iq
 
 # =============================================================================
 # CONSTANTS AND TYPES
@@ -791,6 +794,331 @@ function print_signal_summary(signal::SyntheticSignal)
     end
     
     println("="^60)
+end
+
+# SyntheticSignalGenerator_patch.jl
+# Add these functions to SyntheticSignalGenerator.jl for proper Complex I/Q signal generation
+# with 4-phase rotation matching TickHotLoopF32 format
+
+# Add to exports:
+# export generate_complex_iq_signal, create_test_signal_complex_iq,
+#        apply_4phase_rotation, normalize_price_change
+
+# =============================================================================
+# 4-PHASE ROTATION HELPERS (matching TickHotLoopF32)
+# =============================================================================
+
+"""
+Get 4-phase position for tick index (1-based)
+Position ∈ {1,2,3,4} → {0°, 90°, 180°, 270°}
+"""
+function phase_pos_global(tick_idx::Int64)::Int32
+    return Int32(((tick_idx - 1) & 0x3) + 1)
+end
+
+# Unit complex multipliers for the four quadrants
+const QUAD4 = (ComplexF32(1,0), ComplexF32(0,1), ComplexF32(-1,0), ComplexF32(0,-1))
+
+"""
+Apply 4-phase rotation to normalized value
+"""
+function apply_quad_phase(normalized_value::Float32, pos::Int32)::ComplexF32
+    q = QUAD4[pos]  # q ∈ {1, i, -1, -i}
+    return ComplexF32(normalized_value * real(q), normalized_value * imag(q))
+end
+
+# =============================================================================
+# COMPLEX I/Q SIGNAL GENERATION
+# =============================================================================
+
+"""
+Generate Complex I/Q signal matching TickHotLoopF32 format
+Real part: Normalized price change [-1, +1]
+Imaginary part: 4-phase rotated volume (always 1 tick)
+"""
+function generate_complex_iq_signal(;
+    n_ticks::Int,
+    signal_type::Symbol = :pure_sine,
+    period::Float32 = 26.0f0,  # Filter period in ticks
+    amplitude::Float32 = 50.0f0,  # Price change amplitude in ticks
+    noise_level::Float32 = 0.0f0,
+    normalization_scale::Float32 = 50.0f0,  # Typical price change scale
+    random_seed::Union{Int, Nothing} = nothing
+)::Vector{ComplexF32}
+    
+    # Set random seed if provided
+    if random_seed !== nothing
+        Random.seed!(random_seed)
+    end
+    
+    # Generate price changes
+    t = Float32.(0:n_ticks-1)
+    frequency = Float32(2π) / period
+    
+    if signal_type == :pure_sine
+        # Pure sine wave price changes
+        price_changes = amplitude * sin.(frequency .* t)
+        
+    elseif signal_type == :noisy_sine
+        # Sine with noise
+        price_changes = amplitude * sin.(frequency .* t)
+        price_changes .+= noise_level * amplitude * randn(Float32, n_ticks)
+        
+    elseif signal_type == :fibonacci_mixture
+        # Multiple frequency components
+        price_changes = zeros(Float32, n_ticks)
+        fib_periods = Float32[4, 6, 10, 16, 26, 42, 68]
+        for (i, fib_period) in enumerate(fib_periods)
+            freq = Float32(2π) / fib_period
+            # Decreasing amplitude for higher frequencies
+            amp = amplitude / Float32(i)
+            price_changes .+= amp * sin.(freq .* t .+ randn() * 2π)
+        end
+        
+    elseif signal_type == :market_like
+        # Market-like with trends and mean reversion
+        price_changes = zeros(Float32, n_ticks)
+        current_level = 0.0f0
+        mean_level = 0.0f0
+        mean_reversion_rate = 0.01f0
+        trend = 0.1f0
+        
+        for i in 1:n_ticks
+            # Trend component
+            mean_level += trend
+            
+            # Mean reversion
+            reversion = -mean_reversion_rate * (current_level - mean_level)
+            
+            # Random walk
+            random_walk = amplitude * 0.1f0 * randn()
+            
+            # Fibonacci oscillation
+            fib_component = amplitude * 0.5f0 * sin(frequency * t[i])
+            
+            # Update level
+            current_level += trend + reversion + random_walk + fib_component
+            price_changes[i] = current_level
+        end
+        
+    else
+        error("Unknown signal type: $signal_type")
+    end
+    
+    # Generate Complex I/Q signal with 4-phase rotation
+    signal = Vector{ComplexF32}(undef, n_ticks)
+    
+    for tick_idx in 1:n_ticks
+        # Normalize price change to [-1, +1] range
+        normalized_price = clamp(price_changes[tick_idx] / normalization_scale, -1.0f0, 1.0f0)
+        
+        # Get 4-phase position
+        pos = phase_pos_global(Int64(tick_idx))
+        
+        # Apply 4-phase rotation to normalized value
+        # This rotates the normalized price through the complex plane
+        signal[tick_idx] = apply_quad_phase(normalized_price, pos)
+    end
+    
+    return signal
+end
+
+"""
+Create test signal for filter evaluation with proper Complex I/Q format
+"""
+function create_test_signal_complex_iq(
+    fibonacci_number::Int32;
+    n_ticks::Int = 1000,
+    signal_type::Symbol = :pure_sine,
+    amplitude_factor::Float32 = 1.0f0
+)::Vector{ComplexF32}
+    
+    # Calculate filter period (with doubling)
+    period = fibonacci_number == 1 ? 2.01f0 : Float32(2 * fibonacci_number)
+    
+    # Typical amplitude scales with period
+    amplitude = Float32(10 + fibonacci_number * 2) * amplitude_factor
+    
+    # Generate signal
+    return generate_complex_iq_signal(
+        n_ticks = n_ticks,
+        signal_type = signal_type,
+        period = period,
+        amplitude = amplitude,
+        normalization_scale = amplitude  # Self-normalizing
+    )
+end
+
+"""
+Convert traditional signal to Complex I/Q format with 4-phase rotation
+Useful for adapting existing test signals
+"""
+function convert_to_complex_iq(
+    price_signal::Vector{Float64},
+    ticks_per_bar::Int;
+    normalization_scale::Float32 = 50.0f0
+)::Vector{ComplexF32}
+    
+    n_bars = length(price_signal)
+    n_ticks = n_bars * ticks_per_bar
+    
+    # Interpolate price signal to tick level
+    tick_prices = zeros(Float32, n_ticks)
+    for bar in 1:n_bars
+        start_idx = (bar - 1) * ticks_per_bar + 1
+        end_idx = bar * ticks_per_bar
+        
+        if bar == 1
+            # First bar: assume no change
+            tick_prices[start_idx:end_idx] .= Float32(price_signal[1])
+        else
+            # Linear interpolation between bars
+            start_price = Float32(price_signal[bar-1])
+            end_price = Float32(price_signal[bar])
+            for i in 0:(ticks_per_bar-1)
+                alpha = Float32(i) / Float32(ticks_per_bar)
+                tick_prices[start_idx + i] = start_price + alpha * (end_price - start_price)
+            end
+        end
+    end
+    
+    # Calculate price changes
+    price_changes = zeros(Float32, n_ticks)
+    price_changes[2:end] = diff(tick_prices)
+    
+    # Convert to Complex I/Q with 4-phase rotation
+    signal = Vector{ComplexF32}(undef, n_ticks)
+    
+    for tick_idx in 1:n_ticks
+        # Normalize price change
+        normalized_price = clamp(price_changes[tick_idx] / normalization_scale, -1.0f0, 1.0f0)
+        
+        # Get 4-phase position
+        pos = phase_pos_global(Int64(tick_idx))
+        
+        # Apply 4-phase rotation
+        signal[tick_idx] = apply_quad_phase(normalized_price, pos)
+    end
+    
+    return signal
+end
+
+"""
+Analyze Complex I/Q signal properties
+"""
+function analyze_complex_iq_signal(signal::Vector{ComplexF32})::Dict{String, Any}
+    n_ticks = length(signal)
+    
+    # Extract components
+    real_parts = real.(signal)
+    imag_parts = imag.(signal)
+    magnitudes = abs.(signal)
+    phases = angle.(signal)
+    
+    # Statistics
+    stats = Dict{String, Any}()
+    
+    # Real part (normalized price changes)
+    stats["real_mean"] = mean(real_parts)
+    stats["real_std"] = std(real_parts)
+    stats["real_min"] = minimum(real_parts)
+    stats["real_max"] = maximum(real_parts)
+    stats["real_rms"] = sqrt(mean(real_parts.^2))
+    
+    # Imaginary part (4-phase rotation)
+    stats["imag_mean"] = mean(imag_parts)
+    stats["imag_std"] = std(imag_parts)
+    stats["imag_unique"] = length(unique(round.(imag_parts, digits=3)))
+    
+    # Magnitude statistics
+    stats["mag_mean"] = mean(magnitudes)
+    stats["mag_std"] = std(magnitudes)
+    stats["mag_max"] = maximum(magnitudes)
+    
+    # Phase distribution
+    stats["phase_mean"] = mean(phases)
+    stats["phase_std"] = std(phases)
+    
+    # 4-phase rotation verification
+    # Check if phases follow expected pattern
+    expected_phases = [0, π/2, π, -π/2]
+    phase_errors = Float32[]
+    for i in 1:min(100, n_ticks)
+        pos = phase_pos_global(Int64(i))
+        expected = expected_phases[pos]
+        if magnitudes[i] > 1e-6  # Only check non-zero signals
+            actual = phases[i]
+            # Wrap phase difference to [-π, π]
+            diff = actual - expected
+            while diff > π; diff -= 2π; end
+            while diff < -π; diff += 2π; end
+            push!(phase_errors, abs(diff))
+        end
+    end
+    
+    if !isempty(phase_errors)
+        stats["phase_alignment_error"] = mean(phase_errors)
+        stats["phase_alignment_correct"] = mean(phase_errors .< 0.1)
+    else
+        stats["phase_alignment_error"] = 0.0
+        stats["phase_alignment_correct"] = 1.0
+    end
+    
+    # Signal quality metrics
+    stats["signal_power"] = mean(magnitudes.^2)
+    stats["signal_energy"] = sum(magnitudes.^2)
+    stats["n_ticks"] = n_ticks
+    
+    return stats
+end
+
+"""
+Generate test signal set for Chunk 4 testing
+"""
+function generate_test_signals_complex_iq(
+    fibonacci_numbers::Vector{Int32};
+    n_ticks::Int = 5000,
+    test_types::Vector{Symbol} = [:pure_sine, :noisy_sine, :fibonacci_mixture]
+)::Dict{String, Vector{ComplexF32}}
+    
+    signals = Dict{String, Vector{ComplexF32}}()
+    
+    # Generate individual filter test signals
+    for fib_num in fibonacci_numbers
+        for test_type in test_types
+            key = "fib$(fib_num)_$(test_type)"
+            signals[key] = create_test_signal_complex_iq(
+                fib_num,
+                n_ticks = n_ticks,
+                signal_type = test_type
+            )
+            println("  Generated: $key ($(n_ticks) ticks)")
+        end
+    end
+    
+    # Generate combined signal
+    combined = zeros(ComplexF32, n_ticks)
+    for fib_num in fibonacci_numbers
+        weight = 1.0f0 / sqrt(Float32(fib_num))  # Higher frequencies get less weight
+        signal = create_test_signal_complex_iq(
+            fib_num,
+            n_ticks = n_ticks,
+            signal_type = :pure_sine,
+            amplitude_factor = weight
+        )
+        combined .+= signal
+    end
+    
+    # Normalize combined signal
+    max_mag = maximum(abs.(combined))
+    if max_mag > 0
+        combined ./= max_mag
+    end
+    
+    signals["combined"] = combined
+    println("  Generated: combined signal")
+    
+    return signals
 end
 
 end # module SyntheticSignalGenerator

@@ -1,4 +1,5 @@
-# tests/test_chunk4_revised.jl - Updated tests for phase extrapolation
+# tests/test_chunk4_fixed.jl - Updated tests for phase extrapolation
+# Uses the merged WeightedPrediction module instead of separate modules
 
 """
 Test Suite for Chunk 4 (REVISED) - Weight Optimization with Phase Extrapolation
@@ -18,14 +19,12 @@ using Statistics
 using Random
 using LinearAlgebra
 
-# Include the modules to test
-include("../src/WeightOptimization.jl")
-include("../src/PricePrediction.jl")
+# Include the merged module
+include("../src/WeightedPrediction.jl")
 include("../src/PredictionMetrics.jl")
 include("../src/SyntheticSignalGenerator.jl")
 
-using .WeightOptimization
-using .PricePrediction
+using .WeightedPrediction
 using .PredictionMetrics
 using .SyntheticSignalGenerator
 
@@ -121,7 +120,7 @@ end
     @testset "Filter Frequency Calculation" begin
         # Test frequency calculation from periods
         periods = Float32[2.01, 4.0, 26.0, 52.0]
-        frequencies = PricePrediction.calculate_filter_frequencies(periods)
+        frequencies = WeightedPrediction.calculate_filter_frequencies(periods)
         
         @test length(frequencies) == length(periods)
         
@@ -141,7 +140,7 @@ end
         frequency = Float32(π/4)  # 45 degrees per tick
         n_ticks = Int32(4)
         
-        projected = PricePrediction.project_filter_simple(
+        projected = WeightedPrediction.project_filter_forward(
             current_output, frequency, n_ticks
         )
         
@@ -158,7 +157,7 @@ end
         # Create filters with different periods
         n_filters = 3
         filter_periods = Float32[4.0, 8.0, 16.0]
-        filter_frequencies = PricePrediction.calculate_filter_frequencies(filter_periods)
+        filter_frequencies = WeightedPrediction.calculate_filter_frequencies(filter_periods)
         
         # Current outputs (all starting at phase 0)
         filter_outputs = [ComplexF32(1.0, 0.0) for _ in 1:n_filters]
@@ -168,7 +167,7 @@ end
         weights = Float32[0.3, 0.4, 0.3]
         
         # Use the actual function
-        prediction = PricePrediction.predict_price_change_extrapolated(
+        prediction = WeightedPrediction.predict_price_change_extrapolated(
             filter_outputs, filter_frequencies, weights, n_ticks
         )
         
@@ -189,11 +188,11 @@ end
         ]
         
         filter_periods = Float32[6.0, 12.0, 24.0]
-        frequencies = PricePrediction.calculate_filter_frequencies(filter_periods)
+        frequencies = WeightedPrediction.calculate_filter_frequencies(filter_periods)
         weights = Float32[0.4, 0.3, 0.3]
         n_ticks = Int32(6)
         
-        prediction = PricePrediction.predict_price_change_extrapolated(
+        prediction = WeightedPrediction.predict_price_change_extrapolated(
             filter_outputs, frequencies, weights, n_ticks
         )
         
@@ -231,7 +230,7 @@ end
         # Test fitness evaluation with phase extrapolation
         weights = Float32[0.3, 0.4, 0.3]
         
-        fitness, mse, mae, dir_acc = WeightOptimization.evaluate_weight_fitness(
+        fitness, mse, mae, dir_acc = WeightedPrediction.evaluate_weight_fitness(
             weights, filter_outputs, actual_future, horizon,
             filter_periods=filter_periods
         )
@@ -259,7 +258,7 @@ end
         
         # Create population
         population_size = 10
-        population = WeightOptimization.create_weight_population(
+        population = WeightedPrediction.create_weight_population(
             n_filters, population_size
         )
         
@@ -267,7 +266,7 @@ end
         initial_fitness = -Inf32
         
         for gen in 1:5
-            population, fitness = WeightOptimization.evolve_weights(
+            population, fitness = WeightedPrediction.evolve_weights(
                 population, filter_outputs, actual_future, horizon,
                 filter_periods=filter_periods
             )
@@ -297,7 +296,7 @@ end
         initial_weights = Float32[0.25, 0.25, 0.25, 0.25]
         horizon_range = (Int32(10), Int32(100))
         
-        system = PricePrediction.create_prediction_system(
+        system = WeightedPrediction.create_prediction_system(
             n_filters, initial_weights, filter_periods, horizon_range
         )
         
@@ -313,7 +312,7 @@ end
         filter_periods = Float32[4.0, 8.0, 16.0]
         weights = Float32[0.3, 0.4, 0.3]
         
-        system = PricePrediction.create_prediction_system(
+        system = WeightedPrediction.create_prediction_system(
             n_filters, weights, filter_periods, (Int32(5), Int32(50))
         )
         
@@ -328,12 +327,12 @@ end
             
             input_signal = ComplexF32(sin(0.1 * t), 1.0)
             
-            PricePrediction.update_prediction!(system, filter_outputs, input_signal)
+            WeightedPrediction.update_prediction!(system, filter_outputs, input_signal)
         end
         
         # Get prediction at specific horizon
         horizon = Int32(20)
-        prediction = PricePrediction.get_prediction_at_horizon(system, horizon)
+        prediction = WeightedPrediction.get_prediction_at_horizon(system, horizon)
         
         @test isfinite(prediction)
         @test abs(prediction) <= 3.0  # Reasonable range
@@ -344,7 +343,7 @@ end
         filter_periods = Float32[4.0, 8.0, 16.0]
         weights = Float32[0.3, 0.4, 0.3]
         
-        predictor = PricePrediction.create_streaming_predictor(
+        predictor = WeightedPrediction.create_streaming_predictor(
             n_filters, weights, filter_periods,
             (Int32(10), Int32(100)),
             warmup_period = Int32(20)
@@ -362,14 +361,14 @@ end
             
             input_signal = ComplexF32(sin(0.1 * t), 1.0)
             
-            PricePrediction.process_tick!(predictor, filter_outputs, input_signal)
+            WeightedPrediction.process_tick!(predictor, filter_outputs, input_signal)
         end
         
         @test predictor.is_warmed_up
         @test predictor.system.current_tick == 50
         
         # Check predictions exist
-        predictions = PricePrediction.get_current_predictions(predictor)
+        predictions = WeightedPrediction.get_current_predictions(predictor)
         @test !isempty(predictions)
         
         # All predictions should be finite
@@ -411,10 +410,11 @@ end
         end
         
         # Initialize weights with RMS
-        initial_weights = WeightOptimization.initialize_weights_rms(filter_outputs)
+        filter_outputs_vec = [filter_outputs[:, i] for i in 1:n_filters]
+        initial_weights = WeightedPrediction.initialize_weights_rms(filter_outputs_vec)
         
         # Create prediction system
-        system = PricePrediction.create_prediction_system(
+        system = WeightedPrediction.create_prediction_system(
             Int32(n_filters), initial_weights, filter_periods,
             (Int32(10), Int32(50))
         )
@@ -425,10 +425,10 @@ end
         
         for t in 1:(n_samples - horizon)
             current_outputs = filter_outputs[t, :]
-            frequencies = PricePrediction.calculate_filter_frequencies(filter_periods)
+            frequencies = WeightedPrediction.calculate_filter_frequencies(filter_periods)
             
-            pred = PricePrediction.predict_price_change_extrapolated(
-                current_outputs, frequencies, initial_weights, horizon, Int64(t)
+            pred = WeightedPrediction.predict_price_change_extrapolated(
+                current_outputs, frequencies, initial_weights, horizon
             )
             push!(predictions, pred)
         end
@@ -456,12 +456,12 @@ end
         
         # After period of shortest filter, it should complete full rotation
         n_ticks = Int32(4)
-        frequencies = PricePrediction.calculate_filter_frequencies(filter_periods)
+        frequencies = WeightedPrediction.calculate_filter_frequencies(filter_periods)
         
         # Project all filters
         projected = Vector{ComplexF32}(undef, n_filters)
         for i in 1:n_filters
-            projected[i] = PricePrediction.project_filter_simple(
+            projected[i] = WeightedPrediction.project_filter_forward(
                 filter_outputs[i], frequencies[i], n_ticks
             )
         end
@@ -500,7 +500,7 @@ end
         
         # Time batch prediction with phase extrapolation
         start_time = time()
-        predictions = PricePrediction.predict_batch_extrapolated(
+        predictions = WeightedPrediction.predict_batch_extrapolated(
             filter_outputs, filter_periods, weights, Int32(100)
         )
         elapsed = time() - start_time
@@ -529,7 +529,7 @@ end
         
         # Time fitness evaluation with phase extrapolation
         start_time = time()
-        fitness, mse, mae, dir_acc = WeightOptimization.evaluate_weight_fitness(
+        fitness, mse, mae, dir_acc = WeightedPrediction.evaluate_weight_fitness(
             weights, filter_outputs, actual_future, Int32(50),
             filter_periods=filter_periods
         )
@@ -556,7 +556,7 @@ end
                 output = magnitude * exp(im * phase)
                 
                 for n_ticks in [1, 10, 100]
-                    projected = PricePrediction.project_filter_simple(
+                    projected = WeightedPrediction.project_filter_forward(
                         output, 0.1f0, Int32(n_ticks)
                     )
                     
@@ -573,7 +573,7 @@ end
         
         phases = Float32[]
         for n in 0:20
-            projected = PricePrediction.project_filter_simple(
+            projected = WeightedPrediction.project_filter_forward(
                 output, frequency, Int32(n)
             )
             push!(phases, angle(projected))
@@ -593,7 +593,7 @@ end
         
         projected = Vector{ComplexF32}(undef, n_filters)
         for i in 1:n_filters
-            projected[i] = PricePrediction.project_filter_simple(
+            projected[i] = WeightedPrediction.project_filter_forward(
                 outputs[i], frequencies[i], n_ticks
             )
         end

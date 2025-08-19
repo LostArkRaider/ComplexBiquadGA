@@ -1,4 +1,5 @@
 # src/PricePrediction.jl - Price Change Prediction via Phase-Extrapolated Vector Sum
+# FIXED: Removed CircularArrays dependency, using simple circular buffer implementation
 
 """
 Price Prediction Module - Chunk 4 (REVISED)
@@ -19,7 +20,6 @@ module PricePrediction
 
 using Statistics
 using LinearAlgebra
-using CircularArrays
 
 export PredictionSystem, PredictionBuffer, 
        predict_price_change_extrapolated, predict_batch_extrapolated,
@@ -27,6 +27,57 @@ export PredictionSystem, PredictionBuffer,
        get_prediction_at_horizon, evaluate_predictions,
        PredictionResult, StreamingPredictor,
        calculate_filter_frequencies, project_filter_forward
+
+# =============================================================================
+# SIMPLE CIRCULAR BUFFER IMPLEMENTATION
+# =============================================================================
+
+"""
+Simple circular buffer implementation to replace CircularArrays dependency
+"""
+mutable struct CircularBuffer{T}
+    buffer::Vector{T}
+    capacity::Int
+    size::Int
+    head::Int  # Next write position
+    
+    function CircularBuffer{T}(capacity::Int) where T
+        new{T}(Vector{T}(undef, capacity), capacity, 0, 1)
+    end
+end
+
+function Base.push!(cb::CircularBuffer{T}, item::T) where T
+    cb.buffer[cb.head] = item
+    cb.head = mod1(cb.head + 1, cb.capacity)
+    cb.size = min(cb.size + 1, cb.capacity)
+end
+
+function Base.getindex(cb::CircularBuffer{T}, i::Int) where T
+    if i < 1 || i > cb.size
+        throw(BoundsError(cb, i))
+    end
+    # Calculate actual index in buffer
+    if cb.size < cb.capacity
+        return cb.buffer[i]
+    else
+        # Full buffer, need to account for circular wrap
+        actual_idx = mod1(cb.head + i - cb.size - 1, cb.capacity)
+        return cb.buffer[actual_idx]
+    end
+end
+
+Base.length(cb::CircularBuffer) = cb.size
+Base.isempty(cb::CircularBuffer) = cb.size == 0
+Base.lastindex(cb::CircularBuffer) = cb.size
+
+function Base.last(cb::CircularBuffer{T}) where T
+    if cb.size == 0
+        throw(ArgumentError("CircularBuffer is empty"))
+    end
+    # Last written item is at head-1
+    last_idx = mod1(cb.head - 1, cb.capacity)
+    return cb.buffer[last_idx]
+end
 
 # =============================================================================
 # CONSTANTS
