@@ -5,7 +5,6 @@
 - **v0.6**: Added full vectorization design, GPU-readiness patterns, Float32 optimization
 - **v0.5**: Removed sma_window parameter, added dual parameter space architecture
 - **v0.4**: Added Hybrid JLD2+TOML storage architecture, complex weight parameter
-
 ---
 
 ## 1. Executive Overview

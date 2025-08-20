@@ -29,7 +29,7 @@ required_files = [
     "src/InstrumentManager.jl",
     "src/StorageSystem.jl",
     "src/ConfigurationLoader.jl",
-    "../load_all.jl"
+    "load_all.jl"
 ]
 
 missing_files = String[]

@@ -1,0 +1,20 @@
+{
+    "terminal.integrated.enablePersistentSessions": false,
+    "terminal.integrated.profiles.windows": {
+        "Julia": {
+            "path": "julia",
+            "icon": "terminal"
+        },
+        "PowerShell": {
+            "path": "powershell.exe",
+            "icon": "terminal-powershell"
+        },
+        "Git Bash": {
+            "path": "C:\\Program Files\\Git\\bin\\bash.exe",
+            "icon": "terminal-bash"
+        }
+    },
+    "terminal.integrated.defaultProfile.windows": "PowerShell",
+    "julia.persistentSession.enabled": false,
+    "julia.automaticallyActivateEnvironment": false
+}

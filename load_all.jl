@@ -127,11 +127,11 @@ println("\nChunk 3: Filter Configuration and Fitness")
 println("-"^40)
 
 # Configuration system
-load_module("ModernConfigSystem", "src/ModernConfigSystem.jl")
+load_module("ModernConfigSystem", "src/core/ModernConfigSystem.jl")
 using Main.ModernConfigSystem
 
 # Filter bank implementation
-load_module("ProductionFilterBank", "src/ProductionFilterBank.jl")
+load_module("ProductionFilterBank", "src/core/ProductionFilterBank.jl")
 using Main.ProductionFilterBank
 
 # Filter integration bridge
@@ -173,11 +173,11 @@ println("\nSupporting Modules")
 println("-"^40)
 
 # Synthetic signal generation
-load_module("SyntheticSignalGenerator", "src/SyntheticSignalGenerator.jl")
+load_module("SyntheticSignalGenerator", "src/core/SyntheticSignalGenerator.jl")
 using Main.SyntheticSignalGenerator
 
 # Market data processing
-load_module("TickHotLoopF32", "src/TickHotLoopF32.jl")
+load_module("TickHotLoopF32", "src/core/TickHotLoopF32.jl")
 using Main.TickHotLoopF32
 
 # ============================================================================

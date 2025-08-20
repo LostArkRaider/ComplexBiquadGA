@@ -64,7 +64,7 @@ Project Status
     • Chunk 1 developed and tested
     • Chunk 2 developed and tested
     • Chunk 3 developed and tested
-    • Chunk 4 developed, ready for testing
+    • Chunk 4 developed, partially tested
 
 Related Files
 

@@ -26,7 +26,8 @@ using CircularArrays  # Using package instead of custom implementation
 using Dates
 
 export # Weight Structures
-       WeightSet, PredictionWeights, WeightOptimizer, WeightPopulation,
+       WeightSet, PredictionWeights, 
+       WeightOptimizer, WeightPopulation,
        # Prediction Structures
        PredictionSystem, PredictionResult, StreamingPredictor,
        FilterPhaseState, PredictionBuffer,
@@ -180,7 +181,7 @@ function PredictionBuffer(capacity::Int32, n_filters::Int32, filter_periods::Vec
             design_freq,           # design_frequency
             period,               # period
             0,                    # tick_count
-            0.0f0                 # phase_offset
+            0.0f0                  # phase_offset
         )
     end
     
@@ -197,7 +198,7 @@ end
 Main prediction system managing weights and phase extrapolation
 """
 mutable struct PredictionSystem
-    n_filters::Int32                    # Number of filters in bank
+    n_filters::Int32               # Number of filters in bank
     weights::Vector{Float32}            # Current scalar weights
     filter_periods::Vector{Float32}     # Filter periods (after doubling)
     horizon_range::Tuple{Int32, Int32}  # Min/max prediction horizon
@@ -260,8 +261,7 @@ end
 """
 Initialize weights using RMS normalization for equal contributions
 """
-function initialize_weights_rms(filter_outputs::Vector{Vector{ComplexF32}};
-                               target_rms::Union{Float32, Nothing} = nothing)::Vector{Float32}
+function initialize_weights_rms(filter_outputs::Vector{Vector{ComplexF32}}; target_rms::Union{Float32, Nothing} = nothing)::Vector{Float32}
     
     # Calculate RMS for each filter
     rms_values = calculate_filter_rms(filter_outputs)
@@ -531,8 +531,7 @@ end
 """
 Create initial population of weight vectors
 """
-function create_weight_population(n_filters::Int, population_size::Int;
-                                 initial_weights::Union{Vector{Float32}, Nothing} = nothing)::Matrix{Float32}
+function create_weight_population(n_filters::Int, population_size::Int; initial_weights::Union{Vector{Float32}, Nothing} = nothing)::Matrix{Float32}
     
     population = Matrix{Float32}(undef, population_size, n_filters)
     
@@ -570,8 +569,7 @@ end
 """
 Mutate weight vector
 """
-function mutate_weights!(weights::Vector{Float32}, mutation_rate::Float32;
-                        mutation_strength::Float32 = 0.1f0)
+function mutate_weights!(weights::Vector{Float32}, mutation_rate::Float32; mutation_strength::Float32 = 0.1f0)
     
     n_filters = length(weights)
     
@@ -697,8 +695,7 @@ function create_prediction_system(
     n_filters::Int32,
     initial_weights::Vector{Float32},
     filter_periods::Vector{Float32},
-    horizon_range::Tuple{Int32, Int32};
-    adaptive::Bool = false,
+    horizon_range::Tuple{Int32, Int32}; adaptive::Bool = false,
     learning_rate::Float32 = 0.01f0
 )::PredictionSystem
     
@@ -865,8 +862,7 @@ function create_streaming_predictor(
     n_filters::Int32,
     initial_weights::Vector{Float32},
     filter_periods::Vector{Float32},
-    horizon_range::Tuple{Int32, Int32};
-    warmup_period::Int32 = Int32(100)
+    horizon_range::Tuple{Int32, Int32}; warmup_period::Int32 = Int32(100)
 )::StreamingPredictor
     
     system = create_prediction_system(
@@ -911,7 +907,7 @@ function process_tick!(
         
         @inbounds for horizon in key_horizons
             if horizon >= predictor.system.horizon_range[1] && 
-               horizon <= predictor.system.horizon_range[2]
+                horizon <= predictor.system.horizon_range[2]
                 
                 prediction = get_prediction_at_horizon(predictor.system, horizon)
                 predictor.horizon_predictions[horizon] = prediction
@@ -1004,12 +1000,11 @@ end
 Optimize weights for multiple horizons in range
 """
 function optimize_weights_range(filter_outputs::Matrix{ComplexF32},
-                               actual_future::Vector{ComplexF32},
-                               filter_periods::Vector{Float32},
-                               horizon_range::Tuple{Int32, Int32};
-                               n_horizons::Int = 10,
-                               population_size::Int = 50,
-                               n_generations::Int = 100)::Vector{WeightSet}
+                                actual_future::Vector{ComplexF32},
+                                filter_periods::Vector{Float32},
+                                horizon_range::Tuple{Int32, Int32}; n_horizons::Int = 10,
+                                population_size::Int = 50,
+                                n_generations::Int = 100)::Vector{WeightSet}
     
     # Select horizons to optimize
     min_h, max_h = horizon_range
@@ -1027,7 +1022,7 @@ function optimize_weights_range(filter_outputs::Matrix{ComplexF32},
         
         # Create population
         population = create_weight_population(n_filters, 
-                                             population_size, 
+                                              population_size, 
                                              initial_weights=initial_weights)
         
         # Evolve
@@ -1036,7 +1031,7 @@ function optimize_weights_range(filter_outputs::Matrix{ComplexF32},
         
         for gen in 1:n_generations
             population, fitness = evolve_weights(population, filter_outputs, 
-                                                actual_future, horizon,
+                                                 actual_future, horizon,
                                                 filter_periods=filter_periods)
             
             # Track best
