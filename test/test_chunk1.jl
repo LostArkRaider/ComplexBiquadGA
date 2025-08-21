@@ -8,28 +8,6 @@ using Random
 using Statistics
 using LinearAlgebra  # Add this for norm function
 
-# Include modules from Chunk 2 (prerequisites)
-# Use @__DIR__ to ensure paths work regardless of how the file is called
-include(joinpath(@__DIR__, "../src/GATypes.jl"))
-include(joinpath(@__DIR__, "../src/StorageSystem.jl"))
-
-# Include Chunk 1 modules
-include(joinpath(@__DIR__, "../src/ParameterEncoding.jl"))
-include(joinpath(@__DIR__, "../src/GeneticOperators.jl"))
-include(joinpath(@__DIR__, "../src/PopulationInit.jl"))
-include(joinpath(@__DIR__, "../src/SingleFilterGA.jl"))
-include(joinpath(@__DIR__, "../src/FilterBankGA.jl"))
-
-using Main.GATypes: ParameterRanges, GAParameters, InstrumentConfig
-using Main.StorageSystem
-using Main.ParameterEncoding: encode_parameter, decode_parameter, encode_chromosome, decode_chromosome,
-                              encode_complex_weight, decode_complex_weight, apply_bounds!,
-                              get_parameter_bounds, validate_chromosome
-using Main.GeneticOperators: tournament_selection, uniform_crossover!, gaussian_mutation!,
-                             elite_selection, evolve_population!, population_diversity
-using Main.PopulationInit: initialize_population, initialize_from_seed, validate_population,
-                          repair_population!
-
 # =============================================================================
 # TEST UTILITIES
 # =============================================================================

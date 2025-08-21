@@ -11,19 +11,6 @@ Tests the fitness evaluation system including:
 - Integration with existing GA modules
 """
 
-# Load required modules
-include("../src/GATypes.jl")
-include("../src/ParameterEncoding.jl")
-include("../src/FilterIntegration.jl")
-include("../src/SignalMetrics.jl")
-include("../src/FitnessEvaluation.jl")
-include("../src/GAFitnessBridge.jl")
-
-using Test
-using Statistics
-using LinearAlgebra
-using Random
-using TOML
 
 # =============================================================================
 # HELPER FUNCTIONS FOR REALISTIC FILTER RESPONSES

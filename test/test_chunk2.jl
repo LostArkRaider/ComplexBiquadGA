@@ -6,17 +6,6 @@ using Dates
 using TOML
 using JLD2
 
-# Include modules
-include("../src/GATypes.jl")
-include("../src/InstrumentManager.jl")
-include("../src/StorageSystem.jl")
-include("../src/ConfigurationLoader.jl")
-
-using Main.GATypes
-using Main.InstrumentManager
-using Main.StorageSystem
-using Main.ConfigurationLoader
-
 # =============================================================================
 # TEST UTILITIES
 # =============================================================================
